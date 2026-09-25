@@ -1,0 +1,14 @@
+{
+  "name": "@hookrelay/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./topology": "./src/topology.ts"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.5"
+  }
+}
