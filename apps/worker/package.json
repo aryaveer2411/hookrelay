@@ -1,0 +1,20 @@
+{
+  "name": "@hookrelay/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=../../.env --watch --import tsx src/worker.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hookrelay/shared": "*",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.8",
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
