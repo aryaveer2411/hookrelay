@@ -1,0 +1,24 @@
+import Fastify from 'fastify';
+import { ZodError } from 'zod';
+import { config } from './config.js';
+import { endpointRoutes } from './routes/endpoints.js';
+import { ingestRoutes } from './routes/ingest.js';
+
+const app = Fastify({ logger: true });
+
+// Turn errors into clean responses (no stack traces sent to users)
+app.setErrorHandler((err, req, reply) => {
+  if (err instanceof ZodError) {
+    return reply.code(400).send({ error: 'invalid request', issues: err.issues });
+  }
+  if (err.statusCode && err.statusCode < 500) {
+    return reply.code(err.statusCode).send({ error: err.message });
+  }
+  req.log.error(err);
+  return reply.code(500).send({ error: 'internal error' });
+});
+
+await app.register(endpointRoutes, { prefix: '/api' });
+await app.register(ingestRoutes);
+
+await app.listen({ host: '127.0.0.1', port: config.ENV_PORT });
