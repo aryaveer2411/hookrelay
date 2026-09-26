@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file=../../.env --watch --import tsx src/relay.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "partition:add": "node --env-file=../../.env --import tsx src/add-partition.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hookrelay/shared": "*"

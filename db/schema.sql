@@ -53,3 +53,4 @@ CREATE INDEX outbox_unsent     ON outbox (id) WHERE sent_at IS NULL;            
 CREATE INDEX attempts_by_event ON delivery_attempts (event_id, attempt);                   -- fetch an event's attempts in order
 CREATE INDEX events_page       ON events (endpoint_id, received_at DESC, id DESC);          -- cursor pagination of an endpoint's events
 CREATE INDEX events_pending    ON events (endpoint_id) WHERE status = 'pending';           -- fast lookup of an endpoint's pending events
+CREATE INDEX IF NOT EXISTS outbox_event ON outbox (event_id);

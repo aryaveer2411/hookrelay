@@ -30,15 +30,17 @@ preflight() {
 }
 
 start_worker() {
-  local log="$RUN_DIR/$1.log" started=$SECONDS
-  (cd apps/worker && nohup node --env-file=../../.env --import tsx src/worker.ts > "../../$log" 2>&1 &)
+  local name=$1 primary=${2:-} log="$RUN_DIR/$1.log" started=$SECONDS
+  (cd apps/worker && ENV_WORKER_NAME="$name" ENV_WORKER_PRIMARY="$primary" \
+    nohup node --env-file=../../.env --import tsx src/worker.ts > "../../$log" 2>&1 & \
+    echo $! > "../../$RUN_DIR/$name.pid")
   for _ in $(seq 40); do
     if grep -q 'worker reading' "$log" 2>/dev/null; then
-      echo "✔ worker up ($1) in $((SECONDS - started))s"; return 0
+      echo "✔ $name up in $((SECONDS - started))s${primary:+ (primary: $primary)}"; return 0
     fi
     sleep 0.5
   done
-  echo "✖ worker did not start within 20s, see $log"; exit 1
+  echo "✖ $name did not start within 20s, see $log"; exit 1
 }
 
 kill_worker() { pkill -9 -f 'src/worker.ts' || true; }
@@ -52,4 +54,19 @@ run_load() {
 finish() {
   wait "$LOAD_PID"
   node scripts/reconcile.mjs "$RUN_DIR/accepted.txt"
+}
+
+kill_one() { kill -9 "$(cat "$RUN_DIR/$1.pid")" 2>/dev/null || true; }
+
+run_ordered_load() {
+  OUT="$RUN_DIR/accepted.txt" node scripts/load-ordered.mjs &
+  LOAD_PID=$!
+}
+
+finish_ordered() {
+  wait "$LOAD_PID"
+  local status=0
+  node scripts/reconcile.mjs "$RUN_DIR/accepted.txt" || status=1
+  node scripts/check-order.mjs "$RUN_DIR/accepted.txt" || status=1
+  return $status
 }

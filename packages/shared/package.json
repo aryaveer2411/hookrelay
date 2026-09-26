@@ -4,10 +4,13 @@
   "type": "module",
   "exports": {
     "./topology": "./src/topology.ts",
-    "./crypto": "./src/crypto.ts"
+    "./crypto": "./src/crypto.ts",
+    "./ring": "./src/ring.ts",
+    "./partitions": "./src/partitions.ts"
   },
   "dependencies": {
-    "amqplib": "^0.10.4"
+    "amqplib": "^0.10.4",
+    "ioredis": "^5.4.1"
   },
   "devDependencies": {
     "@types/amqplib": "^0.10.5"

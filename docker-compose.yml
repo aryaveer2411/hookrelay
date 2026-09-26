@@ -33,6 +33,7 @@ services:
       - "127.0.0.1:15672:15672"
     volumes:
       - rabbitdata:/var/lib/rabbitmq
+      - ./infra/rabbitmq.conf:/etc/rabbitmq/conf.d/20-hookrelay.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s

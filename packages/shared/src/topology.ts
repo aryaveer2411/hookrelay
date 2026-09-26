@@ -4,8 +4,8 @@ export const DELIVER_EXCHANGE = 'deliver.exchange';
 export const DEAD_QUEUE = 'dead.q';
 export const MAX_ATTEMPTS = 5;
 
-// Stage 10 grows this list to p0..p7
-export const PARTITIONS = ['p0'] as const;
+// 8 partition queues to start with: deliver.p0 … deliver.p7
+export const DEFAULT_PARTITIONS = ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'] as const;
 
 export const queueFor = (partition: string) => `deliver.${partition}`;
 
@@ -24,10 +24,10 @@ export function retryExchangeFor(failedAttempt: number): string {
   return `${tier.name}.x`;
 }
 
-export async function assertTopology(ch: Channel): Promise<void> {
+export async function assertTopology(ch: Channel,partitions: readonly string[] = DEFAULT_PARTITIONS): Promise<void> {
   await ch.assertExchange(DELIVER_EXCHANGE, 'direct', { durable: true });
 
-  for (const p of PARTITIONS) {
+  for (const p of partitions) {
     const queue = queueFor(p);
     await ch.assertQueue(queue, {
       durable: true,
