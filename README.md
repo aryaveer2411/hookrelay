@@ -174,7 +174,9 @@ script CI runs, so a local pass means the pipeline will pass.
 | `ENV_WORKER_STANDBY_DELAY_MS` | worker | Delay before joining non-primary queues as standby. Default 5000. |
 | `ENV_MOCK_LATENCY_MS` / `ENV_MOCK_RECORD` | mock-target | Simulated latency; disable recording for benchmarks. |
 
-> Nit: `.env.example` currently repeats `ENV_JWT_SECRET`, `ENV_ADMIN_PASSWORD_HASH`, and `ENV_ALLOWED_ORIGINS` three times, and omits the worker/gateway/mock keys above. Worth cleaning up.
+> `.env.example` carries every key that has **no schema default** — those are the ones the
+> apps refuse to start without. The rest of the table above is optional overrides; set them
+> only when you want to change the default.
 
 ---
 
@@ -253,19 +255,60 @@ Both runs held exactly 500.0 rps with zero drops.
 
 ### What the numbers say
 
-**1. Ingest saturates at ~900–940 rps on this box, and that is the whole ceiling.**
-Offering 3× more load (3,000 vs 1,000 rps) moved achieved throughput by 7% — 877 → 936 rps. That is the signature of a hard bottleneck, not a tuning problem. Everything above it queues in k6 as dropped iterations.
+**1. The offered load was never actually offered — read the request accounting first.**
+"Ramp to 3,000 rps" is a *target*, not traffic that reached the server. k6's arrival-rate
+executors are open-model: they try to start N iterations per second whether or not earlier
+ones finished, and each needs a free VU. When the pool is exhausted the surplus iterations
+are **discarded before a socket is opened**. Every request is accounted for:
 
-**2. Backpressure surfaces as latency and VU exhaustion, not as errors.**
-Failure rate stayed at 0.00% in every run. Under saturation, p50 walked from 3.3 ms (run 1, where the first ~100 s were still keeping up) to 2.26 s (run 2, saturated throughout) — a growing queue, not a failing one. The handful of EOF/connection-reset warnings at ~109 s in both runs is the nginx/ingest accept queue overflowing at 2,000+ concurrent VUs, which is the correct behaviour at that point.
+| | Run 1 (steady 1,000) | Run 2 (ramp → 3,000) |
+|---|---|---|
+| Scheduled by k6 | 1,000/s × 120 s = **120,000** | (100+3,000)/2 × 300 s = **465,000** |
+| Sent (`http_reqs`) | 108,558 | 283,103 |
+| Never sent (`dropped_iterations`) | 11,446 | 181,897 |
+| Sum | **120,004** ✓ | **465,000** ✓ |
+| Rejected with 429 | 0 | 0 |
+| Failed (`http_req_failed`) | 4 | 8 |
 
-**3. The delivery path was never the bottleneck.**
+So at the ramp's peak the ~2,100 rps gap between the 3,000 rps target and the ~900 rps
+achieved was **dropped at the load generator** — not rate-limited, not queued server-side,
+not absorbed by extra instances (there is exactly one `ingest` container). Zero 429s is
+expected: the 100 bench endpoints are created at `ratePerSec: 1000` each and traffic is
+spread randomly, so each saw ~9 rps against its own 1,000/s limit.
+
+**2. Why the VU pool ran dry, and what 936 rps actually measures.**
+Little's Law: sustaining 3,000 rps at a ~2 s response time needs 3,000 × 2 = **6,000**
+concurrent VUs. The cap was 3,000, so k6 logged `Insufficient VUs, reached 3000 active VUs`
+and dropped the rest. Past that point the test is no longer open-model at all — it degenerates
+into a closed-loop test of 3,000 in-flight connections, where throughput is simply
+`concurrency / latency`: 3,000 / ~3.2 s ≈ **937 rps**, which is what was measured.
+
+**3. The ceiling is real, and this is the evidence — not the raw rps number.**
+Run 1 capped VUs at 2,000; run 2 at 3,000. **50% more concurrency bought 6.7% more
+throughput** (877 → 936 rps) while p50 rose from 3.3 ms to 2.26 s. Flat throughput with
+latency growing in proportion to concurrency is the signature of a saturated resource. Had
+the load generator been the limit, throughput would have tracked the VU cap. It did not.
+
+**4. Backpressure surfaces as latency, not as errors.**
+Failure rate stayed at 0.00% in every run — a growing queue, not a failing one. The handful
+of EOF/connection-reset warnings at ~109 s in both runs is the accept queue overflowing at
+2,000+ concurrent connections, which is correct behaviour at that point.
+
+**Where this experiment stops.** It establishes *that* something saturates near 900 rps, not
+*which component*. Two caveats stated plainly: k6 ran inside the same 10-CPU Docker VM as the
+stack it measured, so ~900 rps is a **lower bound**; and no component was isolated. The
+candidates are a single-process Node ingest, `pg.Pool({ max: 10 })` in `apps/ingest/src/db.ts`
+(10 connections serving a path that makes 3 round trips including an fsync commit), and
+nginx's `keepalive 64` to the upstream. Distinguishing them means raising one at a time and
+watching whether throughput moves — see "Where the wins are" below.
+
+**5. The delivery path was never the bottleneck.**
 Run 2 delivered 391,648 of 391,648 events, zero dead, and drained **0.5 s** after the last request landed. Relay + RabbitMQ + 2 workers kept up with everything ingest could accept. Run 1's 2,109 `pending` were simply in flight when the report snapshot was taken; the 0.0 s drain confirms the queue was empty.
 
-**4. Worker prefetch does not affect ingest latency — as designed.**
+**6. Worker prefetch does not affect ingest latency — as designed.**
 1 vs 20 differ by ~9 ms at p99, which is noise at this sample size. Prefetch governs the *delivery* path (worker → target); it cannot influence how fast ingest accepts a request. Sweeping it against an ingest-side threshold measured nothing. To actually characterise prefetch, measure `e2e_p99_ms` and drain time under a *saturated queue*, not `http_req_duration` at 500 rps.
 
-**5. The `p99 < 50 ms` threshold is unrealistic for this design.**
+**7. The `p99 < 50 ms` threshold is unrealistic for this design.**
 Even at 500 rps — 55% of capacity, zero queueing — p99 was 58–67 ms against a p50 of 1 ms. A 60× p50→p99 spread means the tail is dominated by per-request synchronous work, not load. Each accepted webhook performs:
 
 ```
@@ -310,9 +353,15 @@ manual dispatch. A newer push to the same branch cancels the run in flight.
 - **Images are built with `docker/build-push-action` and a GHA layer cache**, then tagged
   `hookrelay-app` / `hookrelay-web` — the exact names `docker-compose.yml` declares. Compose
   finds them already present and skips rebuilding.
-- **`compose up --wait` is not enough.** It waits for healthchecks, and the Node services
-  have none, so "running" does not mean "listening". CI then polls `:8080` until nginx and
-  ingest actually answer.
+- **`compose up --wait` is not enough, and "did the edge answer?" is the wrong probe.**
+  `--wait` only blocks until containers are *running*; the Node services have no healthcheck,
+  so running never means listening. Worse, nginx starts answering immediately — with `502`s —
+  while ingest is still booting, so any probe that accepts "some HTTP code came back" passes
+  instantly and the failure surfaces later as a confusing 502 mid-test. Each readiness probe
+  therefore checks the service itself: ingest must return **200** to an authenticated
+  `/api/endpoints` (which also proves Postgres is reachable, since the handler queries it),
+  each gateway must answer its own `/healthz` inside its container, and mock-target must
+  accept a `/_mode` call before any delivery is attempted.
 - **On failure the last 200 lines of every container log are dumped**, and the stack is torn
   down with `-v` either way so no volume leaks between runs.
 

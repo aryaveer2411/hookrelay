@@ -138,21 +138,66 @@ jobs:
       - name: Start the stack
         run: docker compose up -d --wait --wait-timeout 180
 
-      # --wait only proves the containers are running; poll until nginx and
-      # ingest are actually answering before asserting anything.
-      - name: Wait for the edge to answer
+      # --wait only proves the containers are RUNNING. The Node services have no
+      # healthcheck, so "running" does not mean "listening" — and nginx answers 502
+      # the moment it starts, long before ingest is up. Each probe below therefore
+      # checks the service itself, never just the proxy in front of it.
+      - name: Wait for the stack to be ready
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          set -a; source .env; set +a
+
+          fail() {
+            echo "::error::$1"
+            docker compose ps
+            docker compose logs --no-color --tail=100
+            exit 1
+          }
+
+          # A 200 here proves nginx -> ingest -> Postgres all work (the handler
+          # queries the endpoints table). 502 means ingest is still booting.
+          code=''
+          for i in $(seq 120); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              -H "authorization: Bearer $ENV_ADMIN_TOKEN" \
+              http://127.0.0.1:8080/api/endpoints || true)
+            if [ "$code" = "200" ]; then
+              echo "✔ ingest ready after ${i}s"
+              break
+            fi
+            if [ $((i % 10)) -eq 0 ]; then echo "  ${i}s: HTTP $code"; fi
+            sleep 1
+          done
+          [ "$code" = "200" ] || fail "ingest never answered 200 through nginx (last: HTTP $code)"
+
+          # The smoke test's live-feed check needs both gateways, which nginx
+          # load-balances between. /healthz is not routed through nginx, so probe
+          # each container directly.
+          for svc in gateway1 gateway2; do
+            ready=''
+            for i in $(seq 60); do
+              if docker compose exec -T "$svc" node -e \
+                "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
+                2>/dev/null; then
+                echo "✔ $svc ready after ${i}s"; ready=1; break
+              fi
+              sleep 1
+            done
+            [ -n "$ready" ] || fail "$svc never became ready"
+          done
+
+          # Deliveries target mock-target; if it is not listening the first attempt
+          # fails and the retry is 10s away, which would make the smoke test flaky.
+          ready=''
           for i in $(seq 60); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/endpoints || true)
-            if [ "$code" != "000" ]; then
-              echo "edge answering after ${i}s (HTTP $code)"
-              exit 0
+            if curl -sf -X POST http://127.0.0.1:4000/_mode \
+              -H 'content-type: application/json' \
+              -d '{"status":200,"durationSec":1}' > /dev/null; then
+              echo "✔ mock-target ready after ${i}s"; ready=1; break
             fi
             sleep 1
           done
-          echo "::error::nginx/ingest never answered on :8080"
-          exit 1
+          [ -n "$ready" ] || fail "mock-target never became ready"
 
       - name: Smoke test
         run: |
