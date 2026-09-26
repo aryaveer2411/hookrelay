@@ -1,5 +1,7 @@
 # HookRelay
 
+[![CI](https://github.com/aryaveer2411/hookrelay/actions/workflows/ci.yml/badge.svg)](https://github.com/aryaveer2411/hookrelay/actions/workflows/ci.yml)
+
 A webhook ingestion and delivery relay. It accepts signed webhooks, persists them
 transactionally, and delivers them to customer endpoints with at-least-once semantics,
 per-endpoint rate limiting, optional strict ordering, tiered retries, a dead-letter queue,
@@ -112,10 +114,13 @@ manual replay, and a live dashboard.
 ### Docker (full stack)
 
 ```bash
-cp .env.example .env          # then fill in real values, see §5
+npm run env:init              # writes .env with fresh random secrets, prints the admin password
 docker compose up -d --wait
 open http://127.0.0.1:8080
 ```
+
+`env:init` refuses to overwrite an existing `.env`; pass `--force` if you mean it. Set
+`ADMIN_PASSWORD=...` to choose the dashboard password instead of getting a random one.
 
 ### Local dev
 
@@ -130,8 +135,22 @@ npm run dev                   # infra in Docker, all six services with hot reloa
 ### Tests
 
 ```bash
-npm test                      # vitest: crypto, ratelimit, classify, ssrf
+npm test                      # vitest: crypto, ratelimit, classify, ssrf (57 tests)
+npm run typecheck --workspaces --if-present
 ```
+
+### Smoke test
+
+With the stack up, this proves the whole path works — intake, signature rejection,
+dedup, relay, worker, delivery to the target, and the WebSocket live feed:
+
+```bash
+set -a; source .env; set +a
+SMOKE_ADMIN_PASSWORD=<your password> npm run smoke
+```
+
+Omit `SMOKE_ADMIN_PASSWORD` to skip the login and live-feed checks. It is the same
+script CI runs, so a local pass means the pipeline will pass.
 
 ---
 
@@ -270,7 +289,63 @@ That is 3 Postgres round trips (one of them an fsync commit) and 2–3 Redis rou
 
 ---
 
-## 8. Failure scenarios
+## 8. Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to any branch, on pull requests, and on
+manual dispatch. A newer push to the same branch cancels the run in flight.
+
+| Job | Time | What it proves |
+|---|---|---|
+| **Typecheck & unit tests** | ~1 min | `tsc --noEmit` across all 6 workspaces, 57 vitest tests against a real Redis service container, `npm audit --audit-level=high`. |
+| **Secret guard** | seconds | No `.env*`, `bench/endpoints.json`, `logs/`, or `Endpoint id` file is tracked, and no tracked file has a long literal assigned to a `*SECRET*`/`*PASSWORD*`/`MASTER_KEY`/`ADMIN_TOKEN`/`PRIVATE_KEY` name. |
+| **Stack smoke test** | ~3–6 min | Both Docker targets build, the full 11-container stack boots, and a signed webhook is delivered end to end. |
+
+### Why the jobs are shaped this way
+
+- **The unit tests need a `.env`.** Each app's `config.ts` parses the whole env schema at
+  *import* time, and the vitest configs `loadEnv` from the repo root — so the suite cannot
+  start without one. CI generates a throwaway one with `scripts/gen-env.mjs`.
+- **`ratelimit.test.ts` needs a real Redis**, because the token bucket is a Lua script that
+  runs inside Redis. It is a service container, not a mock.
+- **Images are built with `docker/build-push-action` and a GHA layer cache**, then tagged
+  `hookrelay-app` / `hookrelay-web` — the exact names `docker-compose.yml` declares. Compose
+  finds them already present and skips rebuilding.
+- **`compose up --wait` is not enough.** It waits for healthchecks, and the Node services
+  have none, so "running" does not mean "listening". CI then polls `:8080` until nginx and
+  ingest actually answer.
+- **On failure the last 200 lines of every container log are dumped**, and the stack is torn
+  down with `-v` either way so no volume leaks between runs.
+
+### What CI does not run
+
+The chaos scenarios in §9 need host-side worker processes and take several minutes each, so
+they are left as a manual gate before a release rather than a per-push check:
+
+```bash
+npm run dev:noworker
+./scripts/scenarios/run-all.sh
+```
+
+### Reproducing a CI failure locally
+
+CI runs exactly what you can run yourself:
+
+```bash
+npm ci
+ADMIN_PASSWORD=ci-password node scripts/gen-env.mjs --force   # careful: overwrites .env
+npm run typecheck --workspaces --if-present
+npm test
+docker compose up -d --wait
+set -a; source .env; set +a
+SMOKE_ADMIN_PASSWORD=ci-password npm run smoke
+```
+
+> The badge at the top assumes the repo lives at `aryaveer2411/hookrelay`. Fix the two URLs
+> if you push it somewhere else.
+
+---
+
+## 9. Failure scenarios
 
 `scripts/scenarios/` drives fault injection under live load and then reconciles every accepted event id against Postgres and the mock target's receipt log.
 
@@ -291,7 +366,7 @@ npm run dev:noworker          # scenarios start their own worker
 
 ---
 
-## 9. Benchmark harness
+## 10. Benchmark harness
 
 ```bash
 set -a; source .env; set +a
@@ -315,7 +390,7 @@ Set `ENV_MOCK_RECORD=false` when benchmarking — recording every delivery adds 
 
 ---
 
-## 10. Adding a partition
+## 11. Adding a partition
 
 ```bash
 npm run partition:add -w apps/relay
@@ -325,7 +400,7 @@ Asserts the new queue **first**, then publishes the new list to Redis (`hookrela
 
 ---
 
-## 11. Layout
+## 12. Layout
 
 ```
 apps/
@@ -338,6 +413,14 @@ apps/
 packages/shared/ ring, topology, partitions, crypto
 db/              schema.sql, mock.sql (auto-applied on first boot)
 infra/           nginx.conf, rabbitmq.conf
-scripts/         load, reconcile, check-order, bench, scenarios/
+scripts/
+  gen-env.mjs    generate a .env with fresh secrets
+  smoke.mjs      end-to-end check, also run by CI
+  load*.mjs      load generators
+  reconcile.mjs  0-loss assertion after a chaos run
+  check-order.mjs per-endpoint ordering assertion
+  bench-*.mjs    benchmark setup, reporting, live watch
+  scenarios/     fault injection
 bench/           k6 script + exported summaries
+.github/workflows/ci.yml
 ```

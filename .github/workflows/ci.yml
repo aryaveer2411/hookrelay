@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the previous run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22' # matches node:22-slim in the Dockerfile
+
+jobs:
+  # ── Fast feedback: types, unit tests, dependency audit ──────────────────────
+  test:
+    name: Typecheck & unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # The vitest configs read the repo-root .env, and config.ts parses every key
+      # at import time, so the suite cannot start without one.
+      - name: Generate a throwaway .env
+        run: ADMIN_PASSWORD=ci-password node scripts/gen-env.mjs
+
+      - name: Typecheck all workspaces
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+  # ── Nothing secret ever lands in the repo ──────────────────────────────────
+  guard:
+    name: Secret guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Files that must never be tracked
+        run: |
+          set -euo pipefail
+          # Each pattern holds live credentials: env files, generated bench
+          # endpoints (inbound secrets), and scenario logs (accepted event ids).
+          bad=$(git ls-files \
+            | grep -E '^\.env($|\.)|^bench/endpoints\.json$|^logs/|^Endpoint id$' \
+            | grep -vx '.env.example' || true)
+          if [ -n "$bad" ]; then
+            echo "$bad"
+            echo "::error::The files above contain secrets and must not be committed."
+            echo "Remove them with: git rm --cached <file>  (and add them to .gitignore)"
+            exit 1
+          fi
+          echo "✔ no secret-bearing files are tracked"
+
+      - name: Scan tracked files for leaked key material
+        run: |
+          set -euo pipefail
+          # Assignments to a secret-ish name with a long literal value. .env.example
+          # is excluded: it is placeholders by definition.
+          hits=$(git ls-files -z -- . ':!.env.example' \
+            | xargs -0 grep -nEI \
+                '(SECRET|PASSWORD|MASTER_KEY|ADMIN_TOKEN|PRIVATE_KEY)[A-Z_]*[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9+/_-]{24,}' \
+            || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            echo "::error::Possible hardcoded secret. Move it to .env (gitignored)."
+            exit 1
+          fi
+          echo "✔ no hardcoded secrets found"
+
+  # ── The real check: does the whole stack still deliver a webhook? ──────────
+  smoke:
+    name: Stack smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built here with a layer cache and tagged with the names docker-compose.yml
+      # expects, so `compose up` reuses them instead of rebuilding from scratch.
+      - name: Build app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: app
+          tags: hookrelay-app:latest
+          load: true
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: web
+          tags: hookrelay-web:latest
+          load: true
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Generate a throwaway .env
+        run: ADMIN_PASSWORD=ci-password node scripts/gen-env.mjs
+
+      - name: Start the stack
+        run: docker compose up -d --wait --wait-timeout 180
+
+      # --wait only proves the containers are running; poll until nginx and
+      # ingest are actually answering before asserting anything.
+      - name: Wait for the edge to answer
+        run: |
+          set -euo pipefail
+          for i in $(seq 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/endpoints || true)
+            if [ "$code" != "000" ]; then
+              echo "edge answering after ${i}s (HTTP $code)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::nginx/ingest never answered on :8080"
+          exit 1
+
+      - name: Smoke test
+        run: |
+          set -a; source .env; set +a
+          SMOKE_ADMIN_PASSWORD=ci-password node scripts/smoke.mjs
+
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

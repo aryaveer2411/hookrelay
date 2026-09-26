@@ -8,7 +8,9 @@
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
     "dev": "npm run infra:up && concurrently -k -n ingest,relay,worker,mock-target,gateway,dashboard -c blue,green,yellow,magenta,cyan,red \"npm run dev -w apps/ingest\" \"npm run dev -w apps/relay\" \"npm run dev -w apps/worker\" \"npm run dev -w apps/mock-target\" \"npm run dev -w apps/gateway\" \"npm run dev -w apps/dashboard\"",
-    "dev:noworker": "npm run infra:up && concurrently -k -n ingest,relay,mock-target -c blue,green,magenta \"npm run dev -w apps/ingest\" \"npm run dev -w apps/relay\" \"npm run dev -w apps/mock-target\""
+    "dev:noworker": "npm run infra:up && concurrently -k -n ingest,relay,mock-target -c blue,green,magenta \"npm run dev -w apps/ingest\" \"npm run dev -w apps/relay\" \"npm run dev -w apps/mock-target\"",
+    "env:init": "node scripts/gen-env.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "keywords": [],
   "author": "",
