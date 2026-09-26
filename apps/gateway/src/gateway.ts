@@ -190,6 +190,6 @@ function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-server.listen(config.ENV_GATEWAY_PORT, '127.0.0.1', () => {
-  console.log(`${config.ENV_GATEWAY_NAME} listening on ws://127.0.0.1:${config.ENV_GATEWAY_PORT}/ws`);
+server.listen(config.ENV_GATEWAY_PORT, config.ENV_HOST, () => {
+  console.log(`${config.ENV_GATEWAY_NAME} listening on ws://${config.ENV_HOST}:${config.ENV_GATEWAY_PORT}/ws`);
 });

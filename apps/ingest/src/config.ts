@@ -9,6 +9,8 @@ const schema = z.object({
   ENV_REDIS_URL: z.string().url(),
   ENV_JWT_SECRET: z.string().min(32),
   ENV_ADMIN_PASSWORD_HASH: z.string().startsWith('scrypt:'),
+  ENV_HOST: z.string().default('127.0.0.1'),
+  ENV_TRUST_PROXY: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 });
 
 export const config = schema.parse(process.env);

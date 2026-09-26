@@ -12,7 +12,7 @@ const pool = new pg.Pool({ connectionString: process.env.ENV_DB_URL, max: 2 });
 // 1. An ordered endpoint
 const created = await fetch(`${BASE}/api/endpoints`, {
   method: 'POST', headers: auth,
-  body: JSON.stringify({ name: `ordered-test-${Date.now()}`, targetUrl: `${MOCK}/hook`, ordered: true }),
+  body: JSON.stringify({ name: `ordered-test-${Date.now()}`, targetUrl: process.env.TARGET_URL ?? `${MOCK}/hook`, ordered: true }),
 });
 if (!created.ok) throw new Error(`create failed: ${created.status}`);
 const { endpoint, inboundSecret } = await created.json();

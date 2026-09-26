@@ -1,6 +1,7 @@
 import type { StatusMsg } from './types';
 
-const GATEWAYS = ['/gw1', '/gw2'];
+// Dev: Vite proxies /gw1 and /gw2. Production: nginx balances /ws across both gateways.
+const GATEWAYS = import.meta.env.DEV ? ['/gw1', '/gw2'] : ['/ws'];
 
 export type Connection = { state: 'connecting' | 'live' | 'offline'; gateway?: string };
 

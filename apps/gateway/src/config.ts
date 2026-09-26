@@ -8,6 +8,7 @@ const schema = z.object({
   ENV_ALLOWED_ORIGINS: z.string().transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
   ENV_TRUST_PROXY: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   ENV_MAX_CONN_PER_IP: z.coerce.number().int().min(1).default(20),
+  ENV_HOST: z.string().default('127.0.0.1'),
 });
 
 export const config = schema.parse(process.env);

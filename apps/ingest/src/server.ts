@@ -7,7 +7,8 @@ import { ingestRoutes } from './routes/ingest.js';
 import { authRoutes } from './auth.js';
 import { eventRoutes } from './routes/events.js';
 
-const app = Fastify({ logger: true });
+// Behind nginx, trust its X-Forwarded-For so req.ip is the real visitor (login rate limit)
+const app = Fastify({ logger: true, trustProxy: config.ENV_TRUST_PROXY });
 
 await app.register(cors, {
   origin: config.ENV_CORS_ORIGIN ? config.ENV_CORS_ORIGIN.split(',') : false,
@@ -31,4 +32,4 @@ await app.register(endpointRoutes, { prefix: '/api' });
 await app.register(eventRoutes, { prefix: '/api' });
 await app.register(ingestRoutes);
 
-await app.listen({ host: '127.0.0.1', port: config.ENV_PORT });
+await app.listen({ host: config.ENV_HOST, port: config.ENV_PORT });

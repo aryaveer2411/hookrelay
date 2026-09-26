@@ -11,6 +11,9 @@ const env = z.object({
 const pool = new pg.Pool({ connectionString: env.ENV_DB_URL, max: 5 });
 const outboundSecret = env.ENV_MOCK_OUTBOUND_SECRET ? Buffer.from(env.ENV_MOCK_OUTBOUND_SECRET, 'base64') : null;
 const app = Fastify({ logger: false });
+const LATENCY_MS = Number(process.env.ENV_MOCK_LATENCY_MS ?? 0); // pretend to be a real server
+const RECORD = process.env.ENV_MOCK_RECORD !== 'false';          // turn off for the benchmark
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let forcedStatus = 200;
 let forcedUntil = 0;
@@ -39,10 +42,13 @@ app.post('/hook', async (req, reply) => {
   let body: unknown = null;
   try { body = JSON.parse(raw.toString('utf8')); } catch { /* keep null */ }
 
-  await pool.query(
-    'INSERT INTO mock.received (webhook_id, status_returned, body) VALUES ($1, $2, $3)',
-    [webhookId, status, JSON.stringify(body)],
-  );
+  if (LATENCY_MS > 0) await sleep(LATENCY_MS);
+  if (RECORD) {
+    await pool.query(
+      'INSERT INTO mock.received (webhook_id, status_returned, body) VALUES ($1, $2, $3)',
+      [webhookId, status, JSON.stringify(body)],
+    );
+  }
   console.log(`received ${webhookId} → answered ${status} (${note})`);
   return reply.code(status).send({ ok: status < 300 });
 });
@@ -61,5 +67,5 @@ app.post('/_mode', async (req) => {
   return { status, until: new Date(forcedUntil).toISOString() };
 });
 
-await app.listen({ host: '127.0.0.1', port: 4000 });
+await app.listen({ host: process.env.ENV_HOST ?? '127.0.0.1', port: 4000 });
 console.log('mock target listening on http://127.0.0.1:4000');

@@ -13,6 +13,7 @@ const schema = z.object({
   ENV_WORKER_NAME: z.string().default('worker'),
   ENV_WORKER_PRIMARY: z.string().default('').transform(list),     // empty = all partitions
   ENV_WORKER_STANDBY_DELAY_MS: z.coerce.number().int().min(0).default(5000),
+  ENV_SSRF_ALLOW_HOSTS: z.string().default('').transform(list),
 });
 
 export const config = schema.parse(process.env);

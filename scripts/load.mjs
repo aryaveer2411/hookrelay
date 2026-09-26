@@ -17,7 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const created = await fetch(`${BASE}/api/endpoints`, {
   method: 'POST',
   headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
-  body: JSON.stringify({ name: `load-${Date.now()}`, targetUrl: 'http://127.0.0.1:4000/hook', ratePerSec: 1000 }),
+  body: JSON.stringify({ name: `load-${Date.now()}`, targetUrl: process.env.TARGET_URL ?? 'http://127.0.0.1:4000/hook', ratePerSec: 1000 }),
 });
 if (!created.ok) {
   console.error('could not create endpoint:', created.status, await created.text());

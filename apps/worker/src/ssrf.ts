@@ -4,6 +4,8 @@ import { Agent } from 'undici';
 import { config } from './config.js';
 
 const allowList = new Set(config.ENV_SSRF_ALLOW_IPS);
+// Exact hostnames trusted to resolve to private IPs (e.g. the demo's 'mock-target')
+const allowHosts = new Set(config.ENV_SSRF_ALLOW_HOSTS.map((h) => h.toLowerCase()));
 
 // Only public addresses are allowed (plus anything on the dev allow list)
 export function isAllowedIp(address: string): boolean {
@@ -41,7 +43,8 @@ function guardedLookup(hostname: string, options: dns.LookupOptions, callback: (
   dns.lookup(hostname, { all: true }, (err, addresses) => {
     if (err) return callback(err);
     if (addresses.length === 0) return callback(ssrfError(`ESSRF: ${hostname} has no addresses`));
-    const blocked = addresses.find((a) => !isAllowedIp(a.address));
+    const trusted = allowHosts.has(hostname.toLowerCase());
+    const blocked = trusted ? undefined : addresses.find((a) => !isAllowedIp(a.address));
     if (blocked) return callback(ssrfError(`ESSRF: ${hostname} resolves to blocked address ${blocked.address}`));
     if (options?.all) return callback(null, addresses);
     callback(null, addresses[0]!.address, addresses[0]!.family);
