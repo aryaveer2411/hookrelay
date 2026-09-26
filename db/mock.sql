@@ -6,3 +6,4 @@ CREATE TABLE IF NOT EXISTS mock.received (
   body            jsonb,
   received_at     timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS received_webhook ON mock.received (webhook_id);
