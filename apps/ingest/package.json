@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file=../../.env --watch --import tsx src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

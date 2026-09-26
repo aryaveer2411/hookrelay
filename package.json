@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test --workspaces --if-present",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "dev": "npm run infra:up && concurrently -k -n ingest,relay,worker,mock-target -c blue,green,yellow,magenta \"npm run dev -w apps/ingest\" \"npm run dev -w apps/relay\" \"npm run dev -w apps/worker\" \"npm run dev -w apps/mock-target\""
   },
   "keywords": [],
   "author": "",
@@ -14,5 +17,10 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "pg": "^8.23.0",
+    "vitest": "^5.0.2"
+  }
 }
