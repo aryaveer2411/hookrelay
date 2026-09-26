@@ -1,9 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { config } from '../config.js';
 import { pool } from '../db.js';
 import { newSecret, seal } from '../crypto.js';
+import { requireAdmin } from '../auth.js';
 
 const IdParam = z.object({ id: z.string().uuid() });
 
@@ -31,17 +31,6 @@ const UpdateBody = z
 // Never return the secret columns from list/get/update
 const PUBLIC_COLUMNS = 'id, name, target_url, rate_per_sec, ordered, disabled_at, created_at';
 
-// Admin check: compare hashes so both sides are the same length
-const expectedToken = createHash('sha256').update(config.ENV_ADMIN_TOKEN).digest();
-
-async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
-  const header = req.headers.authorization ?? '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  const got = createHash('sha256').update(token).digest();
-  if (!timingSafeEqual(got, expectedToken)) {
-    return reply.code(401).send({ error: 'unauthorized' });
-  }
-}
 
 export async function endpointRoutes(app: FastifyInstance) {
   app.addHook('onRequest', requireAdmin);

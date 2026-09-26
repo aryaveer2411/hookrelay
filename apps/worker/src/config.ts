@@ -10,6 +10,7 @@ const schema = z.object({
     .default('')
     .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
   ENV_ALLOW_HTTP: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  ENV_REDIS_URL: z.string().url(),
 });
 
 export const config = schema.parse(process.env);

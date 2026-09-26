@@ -4,6 +4,8 @@ import { ZodError } from 'zod';
 import { config } from './config.js';
 import { endpointRoutes } from './routes/endpoints.js';
 import { ingestRoutes } from './routes/ingest.js';
+import { authRoutes } from './auth.js';
+import { eventRoutes } from './routes/events.js';
 
 const app = Fastify({ logger: true });
 
@@ -24,7 +26,9 @@ app.setErrorHandler((err, req, reply) => {
   return reply.code(500).send({ error: 'internal error' });
 });
 
+await app.register(authRoutes, { prefix: '/api' });
 await app.register(endpointRoutes, { prefix: '/api' });
+await app.register(eventRoutes, { prefix: '/api' });
 await app.register(ingestRoutes);
 
 await app.listen({ host: '127.0.0.1', port: config.ENV_PORT });

@@ -7,6 +7,8 @@ const schema = z.object({
   ENV_PORT: z.coerce.number().int().default(3000),
   ENV_CORS_ORIGIN: z.string().optional(),
   ENV_REDIS_URL: z.string().url(),
+  ENV_JWT_SECRET: z.string().min(32),
+  ENV_ADMIN_PASSWORD_HASH: z.string().startsWith('scrypt:'),
 });
 
 export const config = schema.parse(process.env);

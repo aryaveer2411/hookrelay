@@ -97,19 +97,23 @@ export async function ingestRoutes(app: FastifyInstance) {
           [endpointId, webhookId],
         );
         const eventId = existing.rows[0].id as string;
-        if (ownsKey) await redis.set(idemKey, eventId, 'EX', DEDUP_TTL_SEC).catch(() => {});
+        if (ownsKey) await redis.set(idemKey, eventId, 'EX', DEDUP_TTL_SEC).catch(() => { });
         return reply.code(200).send({ eventId, duplicate: true });
       }
 
       const eventId = inserted.rows[0].id as string;
       await client.query('INSERT INTO outbox (event_id) VALUES ($1)', [eventId]);
       await client.query('COMMIT');
-      if (ownsKey) await redis.set(idemKey, eventId, 'EX', DEDUP_TTL_SEC, 'XX').catch(() => {});
+      if (ownsKey) await redis.set(idemKey, eventId, 'EX', DEDUP_TTL_SEC, 'XX').catch(() => { });
+      redis.publish(`endpoint:${endpointId}`, JSON.stringify({
+        type: 'status', eventId, endpointId, externalId: webhookId,
+        attempt: 0, outcome: 'received', at: new Date().toISOString(),
+      })).catch(() => { });
       return reply.code(202).send({ eventId });
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      await client.query('ROLLBACK').catch(() => { });
       // Save failed: forget the key so the sender's retry isn't treated as a duplicate
-      if (ownsKey) await redis.del(idemKey).catch(() => {});
+      if (ownsKey) await redis.del(idemKey).catch(() => { });
       throw err;
     } finally {
       client.release();

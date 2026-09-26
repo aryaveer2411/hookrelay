@@ -20,7 +20,9 @@
   ],
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "jose": "^6.2.12",
     "pg": "^8.23.0",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.2",
+    "ws": "^8.22.0"
   }
 }

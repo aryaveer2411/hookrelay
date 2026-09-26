@@ -7,6 +7,7 @@ import { classify, type Outcome } from './classify.js';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { checkTargetUrl, deliveryAgent } from './ssrf.js';
+import { publishStatus } from './status.js';
 
 const QUEUE = queueFor('p0');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -143,6 +144,7 @@ async function handle(ch: ConfirmChannel, msg: ConsumeMessage) {
     if (attempt.outcome === 'success') {
       await record(m, attempt.result, 'delivered');
       console.log(`event ${m.eventId} attempt ${m.attempt} → ${label} ✔ delivered`);
+      publishStatus(m, 'delivered', attempt.result.statusCode);
     } else if (attempt.outcome === 'retry' && m.attempt < MAX_ATTEMPTS) {
       await record(m, attempt.result, null);
       const exchange = retryExchangeFor(m.attempt);
@@ -153,6 +155,7 @@ async function handle(ch: ConfirmChannel, msg: ConsumeMessage) {
         contentType: 'application/json',
       });
       console.log(`event ${m.eventId} attempt ${m.attempt} → ${label}, retrying via ${exchange}`);
+      publishStatus(m, 'retrying', attempt.result.statusCode);
     } else {
       await record(m, attempt.result, 'dead');
       await publish(ch, '', DEAD_QUEUE, msg.content, {
@@ -161,6 +164,7 @@ async function handle(ch: ConfirmChannel, msg: ConsumeMessage) {
         contentType: 'application/json',
       });
       console.log(`event ${m.eventId} attempt ${m.attempt} → ${label} ✖ dead`);
+      publishStatus(m, 'dead', attempt.result.statusCode);
     }
 
     ch.ack(msg); // only after the next step is safely saved
