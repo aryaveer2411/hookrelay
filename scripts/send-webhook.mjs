@@ -8,7 +8,8 @@ if (!endpointId || !secretB64) {
 
 const id = process.env.WEBHOOK_ID ?? `msg_${randomUUID()}`;
 const ts = Math.floor(Date.now() / 1000).toString();
-const body = JSON.stringify({ type: 'test', message });
+const text = process.env.MESSAGE_BYTES ? 'a'.repeat(Number(process.env.MESSAGE_BYTES)) : message;
+const body = JSON.stringify({ type: 'test', message: text });
 const sig = createHmac('sha256', Buffer.from(secretB64, 'base64')).update(`${id}.${ts}.${body}`).digest('base64');
 
 const res = await fetch(`http://127.0.0.1:3000/in/${endpointId}`, {
@@ -21,4 +22,4 @@ const res = await fetch(`http://127.0.0.1:3000/in/${endpointId}`, {
   },
   body,
 });
-console.log(res.status, await res.text());
+console.log(res.status, res.headers.get('retry-after') ? `retry-after=${res.headers.get('retry-after')}` : '', await res.text());

@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./topology": "./src/topology.ts"
+    "./topology": "./src/topology.ts",
+    "./crypto": "./src/crypto.ts"
   },
   "dependencies": {
     "amqplib": "^0.10.4"

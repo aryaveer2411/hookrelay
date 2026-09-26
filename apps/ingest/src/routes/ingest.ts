@@ -1,7 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool } from '../db.js';
+import { redis } from '../redis.js';
 import { open, verifySignature } from '../crypto.js';
+import { takeToken } from '../ratelimit.js';
+
+const DEDUP_TTL_SEC = 86_400; // remember webhook-ids for 24 hours
 
 const Params = z.object({ endpointId: z.string().uuid() });
 const Headers = z.object({
@@ -11,7 +15,6 @@ const Headers = z.object({
 });
 
 export async function ingestRoutes(app: FastifyInstance) {
-  // Keep the raw bytes: the signature is calculated over the exact body
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
 
   app.post('/in/:endpointId', { bodyLimit: 262_144 }, async (req, reply) => {
@@ -27,14 +30,14 @@ export async function ingestRoutes(app: FastifyInstance) {
 
     // 1. Find the endpoint
     const { rows } = await pool.query(
-      'SELECT inbound_secret, disabled_at FROM endpoints WHERE id = $1',
+      'SELECT inbound_secret, rate_per_sec, disabled_at FROM endpoints WHERE id = $1',
       [endpointId],
     );
     const endpoint = rows[0];
     if (!endpoint) return reply.code(404).send({ error: 'unknown endpoint' });
     if (endpoint.disabled_at) return reply.code(410).send({ error: 'endpoint disabled' });
 
-    // 2. Reject old or future timestamps (more than 5 minutes off)
+    // 2. Reject old or future timestamps
     if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) {
       return reply.code(401).send({ error: 'timestamp outside allowed window' });
     }
@@ -45,7 +48,13 @@ export async function ingestRoutes(app: FastifyInstance) {
       return reply.code(401).send({ error: 'invalid signature' });
     }
 
-    // 4. Body must be valid JSON
+    // 4. NEW: rate limit (after the signature, so strangers can't use up your tokens)
+    const limit = await takeToken(endpointId, endpoint.rate_per_sec);
+    if (!limit.allowed) {
+      return reply.code(429).header('Retry-After', String(limit.retryAfterSec)).send({ error: 'rate limit exceeded' });
+    }
+
+    // 5. Body must be valid JSON
     let payload: unknown;
     try {
       payload = JSON.parse(body.toString('utf8'));
@@ -53,7 +62,23 @@ export async function ingestRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'body must be valid JSON' });
     }
 
-    // 5. Save event + outbox row together (both or neither)
+    // 6. NEW: fast duplicate check in Redis
+    const idemKey = `idem:${endpointId}:${webhookId}`;
+    let ownsKey = false;
+    try {
+      ownsKey = (await redis.set(idemKey, 'pending', 'EX', DEDUP_TTL_SEC, 'NX')) === 'OK';
+      if (!ownsKey) {
+        const known = await redis.get(idemKey);
+        if (known && known !== 'pending') {
+          return reply.code(200).send({ eventId: known, duplicate: true });
+        }
+        // 'pending' = another request is saving it right now → Postgres decides below
+      }
+    } catch (err) {
+      req.log.warn(`redis unavailable, using Postgres only: ${(err as Error).message}`);
+    }
+
+    // 7. Save event + outbox row together. Postgres UNIQUE is the final word on duplicates.
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -66,21 +91,25 @@ export async function ingestRoutes(app: FastifyInstance) {
       );
 
       if (inserted.rowCount === 0) {
-        // Same webhook-id seen before: return the original event
         await client.query('ROLLBACK');
         const existing = await pool.query(
           'SELECT id FROM events WHERE endpoint_id = $1 AND external_id = $2',
           [endpointId, webhookId],
         );
-        return reply.code(200).send({ eventId: existing.rows[0].id, duplicate: true });
+        const eventId = existing.rows[0].id as string;
+        if (ownsKey) await redis.set(idemKey, eventId, 'EX', DEDUP_TTL_SEC).catch(() => {});
+        return reply.code(200).send({ eventId, duplicate: true });
       }
 
-      const eventId = inserted.rows[0].id;
+      const eventId = inserted.rows[0].id as string;
       await client.query('INSERT INTO outbox (event_id) VALUES ($1)', [eventId]);
       await client.query('COMMIT');
+      if (ownsKey) await redis.set(idemKey, eventId, 'EX', DEDUP_TTL_SEC, 'XX').catch(() => {});
       return reply.code(202).send({ eventId });
     } catch (err) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
+      // Save failed: forget the key so the sender's retry isn't treated as a duplicate
+      if (ownsKey) await redis.del(idemKey).catch(() => {});
       throw err;
     } finally {
       client.release();

@@ -6,6 +6,7 @@ const schema = z.object({
   ENV_ADMIN_TOKEN: z.string().min(24),
   ENV_PORT: z.coerce.number().int().default(3000),
   ENV_CORS_ORIGIN: z.string().optional(),
+  ENV_REDIS_URL: z.string().url(),
 });
 
 export const config = schema.parse(process.env);
