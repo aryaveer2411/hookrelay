@@ -77,6 +77,10 @@ public class EndpointService {
     }
 
     public EndpointResponseDto updateEndpoint(UUID id, EndpointRequestDto request) {
+
+        if (request.target_url() == null && request.name() == null && request.ordered() == null && request.ratePerSec() == null) {
+            throw new RuntimeException("Nothing to update");
+        }
         EndpointEntity endpoint = endpointRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Endpoint not found"));
         endpoint.update(request.name(), request.target_url(), request.ratePerSec(), request.ordered());

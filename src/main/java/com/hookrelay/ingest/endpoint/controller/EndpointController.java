@@ -34,7 +34,7 @@ public class EndpointController {
 
     @PatchMapping("/{id}")
     @ResponseStatus(HttpStatus.OK)
-    public EndpointResponseDto updateEndpoint(@PathVariable UUID id, @Valid @RequestBody EndpointRequestDto request) {
+    public EndpointResponseDto updateEndpoint(@PathVariable UUID id, @RequestBody EndpointRequestDto request) {
         return endpointService.updateEndpoint(id, request);
     }
 
