@@ -38,4 +38,10 @@ public class EndpointController {
         return endpointService.updateEndpoint(id, request);
     }
 
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.OK)
+    public EndpointResponseDto disableEndpoint(@PathVariable UUID id) {
+        return endpointService.disableEndpoint(id);
+    }
+
 }

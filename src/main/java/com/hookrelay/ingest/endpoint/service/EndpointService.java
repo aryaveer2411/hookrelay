@@ -7,7 +7,9 @@ import com.hookrelay.ingest.endpoint.entity.EndpointEntity;
 import com.hookrelay.ingest.endpoint.repository.EndpointRepository;
 import com.hookrelay.security.SecretService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -97,5 +99,27 @@ public class EndpointService {
                 endpoint.getCreatedAt()
         );
 
+    }
+
+    @Transactional
+    public EndpointResponseDto disableEndpoint(UUID id) {
+        int updated = endpointRepository.disableIfEnabled(id, Instant.now());
+
+        EndpointEntity endpoint = endpointRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Endpoint not found"));
+
+        if (updated == 0) {
+            throw new RuntimeException("Endpoint is already disabled");
+        }
+
+        return new EndpointResponseDto(
+                endpoint.getId(),
+                endpoint.getName(),
+                endpoint.getTargetUrl(),
+                endpoint.getRatePerSec(),
+                endpoint.getOrdered(),
+                endpoint.getDisabledAt(),
+                endpoint.getCreatedAt()
+        );
     }
 }
