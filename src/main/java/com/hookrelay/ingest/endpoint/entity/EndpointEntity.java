@@ -1,6 +1,9 @@
 package com.hookrelay.ingest.endpoint.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -35,8 +38,31 @@ public class EndpointEntity {
         this.name = name;
         this.targetUrl = targetUrl;
         this.createdAt = Instant.now();
-        this.ratePerSec = ratePerSec;
-        this.ordered = ordered;
+        this.ratePerSec = ratePerSec != null ? ratePerSec : 50;
+        this.ordered = ordered != null && ordered;
+    }
+
+    public void update(
+            String name,
+            String targetUrl,
+            Integer ratePerSec,
+            Boolean ordered
+    ) {
+        if (name != null) {
+            this.name = name;
+        }
+
+        if (targetUrl != null) {
+            this.targetUrl = targetUrl;
+        }
+
+        if (ratePerSec != null) {
+            this.ratePerSec = ratePerSec;
+        }
+
+        if (ordered != null) {
+            this.ordered = ordered;
+        }
     }
 
     public UUID getId() {

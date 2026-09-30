@@ -1,8 +1,6 @@
 package com.hookrelay.ingest.endpoint.dto;
 
-import java.util.UUID;
-
-public record CreateEndpointResponseDto(UUID id,
+public record CreateEndpointResponseDto(EndpointResponseDto endpointResponseDto,
                                         String inboundSecret,
                                         String outboundSecret) {
 }

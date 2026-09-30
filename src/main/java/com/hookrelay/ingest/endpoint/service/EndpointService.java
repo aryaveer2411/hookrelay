@@ -1,8 +1,8 @@
 package com.hookrelay.ingest.endpoint.service;
 
-import com.hookrelay.ingest.endpoint.dto.CreateEndpointRequestDto;
 import com.hookrelay.ingest.endpoint.dto.CreateEndpointResponseDto;
-import com.hookrelay.ingest.endpoint.dto.GetEndpointResponseDto;
+import com.hookrelay.ingest.endpoint.dto.EndpointRequestDto;
+import com.hookrelay.ingest.endpoint.dto.EndpointResponseDto;
 import com.hookrelay.ingest.endpoint.entity.EndpointEntity;
 import com.hookrelay.ingest.endpoint.repository.EndpointRepository;
 import com.hookrelay.security.SecretService;
@@ -25,9 +25,12 @@ public class EndpointService {
     }
 
 
-    public CreateEndpointResponseDto createEndpoint (CreateEndpointRequestDto request){
-        UUID endpointId = UUID.randomUUID();
+    public CreateEndpointResponseDto createEndpoint(EndpointRequestDto request) {
+        if (request.name() == null || request.target_url() == null) {
+            throw new RuntimeException("Name or TargetUrl is missing");
+        }
 
+        UUID endpointId = UUID.randomUUID();
         EndpointEntity endpoint = new EndpointEntity(
                 endpointId,
                 request.name(),
@@ -45,16 +48,24 @@ public class EndpointService {
                 secretService.generateOutboundSecret(endpointId);
 
         return new CreateEndpointResponseDto(
-                endpointId,
+                new EndpointResponseDto(
+                        endpoint.getId(),
+                        endpoint.getName(),
+                        endpoint.getTargetUrl(),
+                        endpoint.getRatePerSec(),
+                        endpoint.getOrdered(),
+                        endpoint.getDisabledAt(),
+                        endpoint.getCreatedAt()
+                ),
                 inboundSecret,
                 outboundSecret
         );
     }
 
-    public GetEndpointResponseDto getEndpoint(UUID id){
+    public EndpointResponseDto getEndpoint(UUID id) {
         EndpointEntity endpoint = endpointRepository.findById(id).orElseThrow(()-> new RuntimeException("Not Found"));
 
-        return new GetEndpointResponseDto(
+        return new EndpointResponseDto(
                 endpoint.getId(),
                 endpoint.getName(),
                 endpoint.getTargetUrl(),
@@ -63,5 +74,24 @@ public class EndpointService {
                 endpoint.getDisabledAt(),
                 endpoint.getCreatedAt()
         );
+    }
+
+    public EndpointResponseDto updateEndpoint(UUID id, EndpointRequestDto request) {
+        EndpointEntity endpoint = endpointRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Endpoint not found"));
+        endpoint.update(request.name(), request.target_url(), request.ratePerSec(), request.ordered());
+
+        endpointRepository.save(endpoint);
+
+        return new EndpointResponseDto(
+                endpoint.getId(),
+                endpoint.getName(),
+                endpoint.getTargetUrl(),
+                endpoint.getRatePerSec(),
+                endpoint.getOrdered(),
+                endpoint.getDisabledAt(),
+                endpoint.getCreatedAt()
+        );
+
     }
 }

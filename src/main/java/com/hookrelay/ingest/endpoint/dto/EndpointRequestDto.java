@@ -1,17 +1,9 @@
 package com.hookrelay.ingest.endpoint.dto;
 
-import jakarta.validation.constraints.NotBlank;
-
-public record CreateEndpointRequestDto(
-        @NotBlank
+public record EndpointRequestDto(
         String name,
-
-        @NotBlank
         String target_url,
-
-
         Integer ratePerSec,
-
         Boolean ordered
 ) {
 }
