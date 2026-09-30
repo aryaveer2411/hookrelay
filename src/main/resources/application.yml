@@ -13,3 +13,6 @@ spring:
 
 server:
   port: ${ENV_PORT:8080}
+
+hookrelay:
+  secret-key: ${ENV_MASTER_KEY}
