@@ -1,0 +1,47 @@
+# Infra only. The Spring Boot app runs on the host (IDE / mvn spring-boot:run) for now.
+# All ports bound to 127.0.0.1 so nothing is exposed on your LAN.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${ENV_DB_USER}
+      POSTGRES_PASSWORD: ${ENV_DB_PASSWORD}
+      POSTGRES_DB: ${ENV_DB_NAME}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # schema comes from Flyway, not initdb scripts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ENV_DB_USER} -d ${ENV_DB_NAME}"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    ports: ["127.0.0.1:6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${ENV_RABBIT_USER}
+      RABBITMQ_DEFAULT_PASS: ${ENV_RABBIT_PASSWORD}
+    ports:
+      - "127.0.0.1:5672:5672"     # AMQP
+      - "127.0.0.1:15672:15672"   # management UI
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+      - ./infra/rabbitmq.conf:/etc/rabbitmq/conf.d/20-hookrelay.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  rabbitdata:
