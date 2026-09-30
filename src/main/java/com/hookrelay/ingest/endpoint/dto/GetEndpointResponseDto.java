@@ -1,4 +1,4 @@
-package com.hookrelay.ingest.dto;
+package com.hookrelay.ingest.endpoint.dto;
 
 import java.time.Instant;
 import java.util.UUID;

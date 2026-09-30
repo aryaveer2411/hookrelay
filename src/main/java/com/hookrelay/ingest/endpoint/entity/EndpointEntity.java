@@ -1,4 +1,4 @@
-package com.hookrelay.ingest.entity;
+package com.hookrelay.ingest.endpoint.entity;
 
 import jakarta.persistence.*;
 

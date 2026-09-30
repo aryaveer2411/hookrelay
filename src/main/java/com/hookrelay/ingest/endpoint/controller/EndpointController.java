@@ -1,9 +1,9 @@
-package com.hookrelay.ingest.controller;
+package com.hookrelay.ingest.endpoint.controller;
 
-import com.hookrelay.ingest.dto.CreateEndpointRequestDto;
-import com.hookrelay.ingest.dto.CreateEndpointResponseDto;
-import com.hookrelay.ingest.dto.GetEndpointResponseDto;
-import com.hookrelay.ingest.service.EndpointService;
+import com.hookrelay.ingest.endpoint.dto.CreateEndpointRequestDto;
+import com.hookrelay.ingest.endpoint.dto.CreateEndpointResponseDto;
+import com.hookrelay.ingest.endpoint.dto.GetEndpointResponseDto;
+import com.hookrelay.ingest.endpoint.service.EndpointService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;

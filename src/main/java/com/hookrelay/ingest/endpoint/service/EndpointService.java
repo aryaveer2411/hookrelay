@@ -1,10 +1,10 @@
-package com.hookrelay.ingest.service;
+package com.hookrelay.ingest.endpoint.service;
 
-import com.hookrelay.ingest.dto.CreateEndpointRequestDto;
-import com.hookrelay.ingest.dto.CreateEndpointResponseDto;
-import com.hookrelay.ingest.dto.GetEndpointResponseDto;
-import com.hookrelay.ingest.entity.EndpointEntity;
-import com.hookrelay.ingest.repository.EndpointRepository;
+import com.hookrelay.ingest.endpoint.dto.CreateEndpointRequestDto;
+import com.hookrelay.ingest.endpoint.dto.CreateEndpointResponseDto;
+import com.hookrelay.ingest.endpoint.dto.GetEndpointResponseDto;
+import com.hookrelay.ingest.endpoint.entity.EndpointEntity;
+import com.hookrelay.ingest.endpoint.repository.EndpointRepository;
 import com.hookrelay.security.SecretService;
 import org.springframework.stereotype.Service;
 
