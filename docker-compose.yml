@@ -1,5 +1,7 @@
 # Infra only. The Spring Boot app runs on the host (IDE / mvn spring-boot:run) for now.
 # All ports bound to 127.0.0.1 so nothing is exposed on your LAN.
+name: hookrelay_java
+
 services:
   postgres:
     image: postgres:16
@@ -7,7 +9,7 @@ services:
       POSTGRES_USER: ${ENV_DB_USER}
       POSTGRES_PASSWORD: ${ENV_DB_PASSWORD}
       POSTGRES_DB: ${ENV_DB_NAME}
-    ports: ["127.0.0.1:5433:5432"]
+    ports: ["127.0.0.1:5434:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data   # schema comes from Flyway, not initdb scripts
     healthcheck:
@@ -18,7 +20,7 @@ services:
 
   redis:
     image: redis:7
-    ports: ["127.0.0.1:6379:6379"]
+    ports: ["127.0.0.1:6380:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -31,8 +33,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${ENV_RABBIT_USER}
       RABBITMQ_DEFAULT_PASS: ${ENV_RABBIT_PASSWORD}
     ports:
-      - "127.0.0.1:5672:5672"     # AMQP
-      - "127.0.0.1:15672:15672"   # management UI
+      - "127.0.0.1:5673:5672"     # AMQP
+      - "127.0.0.1:15673:15672"   # management UI
     volumes:
       - rabbitdata:/var/lib/rabbitmq
       - ./infra/rabbitmq.conf:/etc/rabbitmq/conf.d/20-hookrelay.conf:ro
