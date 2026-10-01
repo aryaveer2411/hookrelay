@@ -6,6 +6,9 @@ import org.springframework.stereotype.Service;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -13,6 +16,11 @@ import java.util.UUID;
 public class SecretService {
 
     private static final String HMAC_ALGORITHM = "HmacSHA256";
+
+    /**
+     * How far a webhook timestamp may drift from now before it is treated as a replay.
+     */
+    private static final Duration REPLAY_TOLERANCE = Duration.ofMinutes(5);
 
     private final String masterKey;
 
@@ -42,18 +50,43 @@ public class SecretService {
         return generateSecret(endpointId, "outbound");
     }
 
-    public String signWebhook(UUID endpointId, String type, String requestBody) {
+    /**
+     * Signs a webhook over "<epochSeconds>:<endpointId>:<body>".
+     * <p>
+     * The timestamp is part of the signed data so a captured request cannot be
+     * replayed later; the caller must send it alongside the signature so the
+     * receiver can recompute the same string.
+     */
+    public String signWebhook(UUID endpointId, String type, String requestBody, Instant timestamp) {
         String secret = generateSecret(endpointId, type);
 
-        if ("inbound".equals(type)) {
-            return hmac(secret, endpointId.toString());
+        return hmac(secret, timestamp.getEpochSecond() + ":" + endpointId + ":" + requestBody);
+    }
+
+    /**
+     * Verifies a signature and rejects anything outside the replay tolerance window.
+     */
+    public boolean verifyWebhook(
+            UUID endpointId,
+            String type,
+            String requestBody,
+            Instant timestamp,
+            String signature
+    ) {
+        if (signature == null || timestamp == null) {
+            return false;
         }
 
-        if ("outbound".equals(type)) {
-            return hmac(secret, endpointId + ":" + requestBody);
+        if (Duration.between(timestamp, Instant.now()).abs().compareTo(REPLAY_TOLERANCE) > 0) {
+            return false;
         }
 
-        throw new IllegalArgumentException("Invalid webhook type");
+        String expected = signWebhook(endpointId, type, requestBody, timestamp);
+
+        return MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                signature.getBytes(StandardCharsets.UTF_8)
+        );
     }
 
     private String generateSecret(UUID endpointId, String type) {

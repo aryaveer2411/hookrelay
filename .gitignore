@@ -5,3 +5,6 @@ target/
 .env.*
 !.env.example
 logs/
+
+.claude/
+.DS_Store
