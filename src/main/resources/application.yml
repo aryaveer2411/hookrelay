@@ -7,6 +7,11 @@ spring:
     username: ${ENV_DB_USER}
     password: ${ENV_DB_PASSWORD}
 
+  rabbitmq:
+    addresses: ${ENV_RABBIT_URL}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
   jpa:
     hibernate:
       ddl-auto: validate
