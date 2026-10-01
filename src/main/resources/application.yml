@@ -19,5 +19,16 @@ spring:
 server:
   port: ${ENV_PORT:8080}
 
+logging:
+  level:
+    com.hookrelay: ${ENV_LOG_LEVEL:INFO}
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level %logger{0} - %msg%n"
+
 hookrelay:
   secret-key: ${ENV_MASTER_KEY}
+  logging:
+    # Request/response bodies in the console. Secret-looking JSON fields are masked,
+    # but turn this off in production if payloads may carry customer data.
+    include-body: ${ENV_LOG_BODY:true}
+    max-body-chars: 2000

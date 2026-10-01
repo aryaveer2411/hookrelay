@@ -1,5 +1,6 @@
 package com.hookrelay.ingest.endpoint.service;
 
+import com.hookrelay.common.exception.ApiException;
 import com.hookrelay.ingest.endpoint.dto.CreateEndpointResponseDto;
 import com.hookrelay.ingest.endpoint.dto.EndpointRequestDto;
 import com.hookrelay.ingest.endpoint.dto.EndpointResponseDto;
@@ -29,7 +30,7 @@ public class EndpointService {
 
     public CreateEndpointResponseDto createEndpoint(EndpointRequestDto request) {
         if (request.name() == null || request.target_url() == null) {
-            throw new RuntimeException("Name or TargetUrl is missing");
+            throw ApiException.badRequest("name and target_url are required");
         }
 
         UUID endpointId = UUID.randomUUID();
@@ -65,7 +66,7 @@ public class EndpointService {
     }
 
     public EndpointResponseDto getEndpoint(UUID id) {
-        EndpointEntity endpoint = endpointRepository.findById(id).orElseThrow(()-> new RuntimeException("Not Found"));
+        EndpointEntity endpoint = endpointRepository.findById(id).orElseThrow(() -> ApiException.notFound("Endpoint not found: " + id));
 
         return new EndpointResponseDto(
                 endpoint.getId(),
@@ -81,10 +82,10 @@ public class EndpointService {
     public EndpointResponseDto updateEndpoint(UUID id, EndpointRequestDto request) {
 
         if (request.target_url() == null && request.name() == null && request.ordered() == null && request.ratePerSec() == null) {
-            throw new RuntimeException("Nothing to update");
+            throw ApiException.badRequest("Nothing to update: provide at least one of name, target_url, ratePerSec, ordered");
         }
         EndpointEntity endpoint = endpointRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Endpoint not found"));
+                .orElseThrow(() -> ApiException.notFound("Endpoint not found: " + id));
         endpoint.update(request.name(), request.target_url(), request.ratePerSec(), request.ordered());
 
         endpointRepository.save(endpoint);
@@ -106,10 +107,10 @@ public class EndpointService {
         int updated = endpointRepository.disableIfEnabled(id, Instant.now());
 
         EndpointEntity endpoint = endpointRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Endpoint not found"));
+                .orElseThrow(() -> ApiException.notFound("Endpoint not found: " + id));
 
         if (updated == 0) {
-            throw new RuntimeException("Endpoint is already disabled");
+            throw ApiException.conflict("Endpoint is already disabled");
         }
 
         return new EndpointResponseDto(
