@@ -83,10 +83,26 @@ public class SecretService {
 
         String expected = signWebhook(endpointId, type, requestBody, timestamp);
 
-        return MessageDigest.isEqual(
-                expected.getBytes(StandardCharsets.UTF_8),
-                signature.getBytes(StandardCharsets.UTF_8)
-        );
+        byte[] expectedBytes = decode(expected);
+        byte[] providedBytes = decode(signature);
+
+        if (providedBytes == null) {
+            return false;
+        }
+
+        return MessageDigest.isEqual(expectedBytes, providedBytes);
+    }
+
+    /**
+     * Decodes a url-safe Base64 signature, returning null when the caller sent
+     * something that is not valid Base64 at all.
+     */
+    private byte[] decode(String signature) {
+        try {
+            return Base64.getUrlDecoder().decode(signature);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private String generateSecret(UUID endpointId, String type) {

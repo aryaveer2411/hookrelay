@@ -1,4 +1,4 @@
-package com.hookrelay.ingest.outbox.entity;
+package com.hookrelay.outbox.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

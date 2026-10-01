@@ -33,6 +33,10 @@ public class EndpointEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+
+    protected EndpointEntity() {
+    }
+
     public EndpointEntity(UUID id,String name, String targetUrl,Integer ratePerSec, Boolean ordered) {
         this.id = id;
         this.name = name;
