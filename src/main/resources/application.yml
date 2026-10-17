@@ -3,8 +3,8 @@ spring:
     import: optional:file:.env[.properties]
 
   profiles:
-    # Used only when no profile is set explicitly; later: --spring.profiles.active=relay,worker per process.
-    default: relay
+    # Used only when no profile is set explicitly; later: --spring.profiles.active=relay or worker per process.
+    default: relay,worker
 
   datasource:
     url: ${ENV_DB_URL}
@@ -18,6 +18,10 @@ spring:
     template:
       # Unroutable messages come back as returns instead of being silently dropped.
       mandatory: true
+    listener:
+      simple:
+        # At most 20 unacked messages per consumer, so one worker never hoards the queue.
+        prefetch: 20
 
   jpa:
     hibernate:
