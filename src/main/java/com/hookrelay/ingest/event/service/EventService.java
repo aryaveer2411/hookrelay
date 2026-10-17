@@ -1,9 +1,12 @@
 package com.hookrelay.ingest.event.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hookrelay.attempt.repository.DeliveryAttemptRepository;
 import com.hookrelay.ingest.endpoint.entity.EndpointEntity;
 import com.hookrelay.ingest.endpoint.repository.EndpointRepository;
 import com.hookrelay.ingest.event.dto.CreateEventRequestDto;
+import com.hookrelay.ingest.event.dto.DeliveryAttemptDto;
+import com.hookrelay.ingest.event.dto.EventDetailResponseDto;
 import com.hookrelay.ingest.event.dto.EventResponseDto;
 import com.hookrelay.ingest.event.entity.EventEntity;
 import com.hookrelay.ingest.event.repository.EventRepository;
@@ -16,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -26,19 +30,47 @@ public class EventService {
     private final EventRepository eventRepository;
     private final OutboxRepository outboxRepository;
     private final EndpointRepository endpointRepository;
+    private final DeliveryAttemptRepository attemptRepository;
     private final SecretService secretService;
     private final ObjectMapper objectMapper;
 
     public EventService(EventRepository eventRepository,
                         OutboxRepository outboxRepository,
                         EndpointRepository endpointRepository,
+                        DeliveryAttemptRepository attemptRepository,
                         SecretService secretService,
                         ObjectMapper objectMapper) {
         this.eventRepository = eventRepository;
         this.outboxRepository = outboxRepository;
         this.endpointRepository = endpointRepository;
+        this.attemptRepository = attemptRepository;
         this.secretService = secretService;
         this.objectMapper = objectMapper;
+    }
+
+    /** One event and its delivery timeline, oldest attempt first. */
+    @Transactional(readOnly = true)
+    public EventDetailResponseDto getEvent(UUID id) {
+        EventEntity event = eventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+
+        List<DeliveryAttemptDto> attempts = attemptRepository.findByEventIdOrderByAttemptAscIdAsc(id).stream()
+                .map(a -> new DeliveryAttemptDto(
+                        a.getAttempt(),
+                        a.getStatusCode(),
+                        a.getError(),
+                        a.getLatencyMs(),
+                        a.getCreatedAt()))
+                .toList();
+
+        return new EventDetailResponseDto(
+                event.getId(),
+                event.getEndpointId(),
+                event.getExternalId(),
+                event.getStatus(),
+                event.getReceivedAt(),
+                attempts
+        );
     }
 
     /**

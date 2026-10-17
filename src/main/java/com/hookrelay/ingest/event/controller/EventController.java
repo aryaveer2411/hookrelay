@@ -1,8 +1,11 @@
 package com.hookrelay.ingest.event.controller;
 
+import com.hookrelay.ingest.event.dto.EventDetailResponseDto;
 import com.hookrelay.ingest.event.dto.EventResponseDto;
 import com.hookrelay.ingest.event.service.EventService;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -11,6 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/event")
@@ -37,5 +41,11 @@ public class EventController {
             @RequestBody String rawBody
     ) {
         return eventService.ingestEvent(rawBody, Instant.ofEpochSecond(timestamp), signature);
+    }
+
+    @GetMapping("/{id}")
+    @ResponseStatus(HttpStatus.OK)
+    public EventDetailResponseDto getEvent(@PathVariable UUID id) {
+        return eventService.getEvent(id);
     }
 }
